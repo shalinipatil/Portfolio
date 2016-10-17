@@ -1,0 +1,228 @@
+<!doctype>
+<html>
+<head>
+<meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="http://www.w3schools.com/lib/w3.css">
+
+<style>
+
+.node {
+  stroke: #fff;
+  stroke-width: 1px;
+}
+
+.node-active{
+  stroke: #555;
+  stroke-width: 1px;
+}
+.node-inactive{
+  fill-opacity: 0.2;
+}
+.link {
+  stroke: #555;
+  stroke-opacity: .3;
+}
+
+.link-active {
+  stroke-opacity: 1;
+}
+
+.overlay {
+  fill: none;
+  pointer-events: all;
+}
+
+#map{
+    border: 1px #555 dashed;
+    width:1300px;
+    height:900px;
+}
+</style>
+
+</head>
+<body>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"> </script>
+<div id="map"></div>
+<script>
+
+var margin = {top: -5, right: -5, bottom: -5, left: -5};
+        var width = 1300 - margin.left - margin.right,
+			height = 900- margin.top - margin.bottom,root;
+
+        var color = d3.scale.category20();
+	
+	var force = d3.layout.force()
+			.charge(-420)
+            .linkDistance(200)
+			.size([width + margin.left + margin.right, height + margin.top + margin.bottom]);
+			
+	
+
+        var zoom = d3.behavior.zoom()
+            .scaleExtent([1, 10])
+            .on("zoom", zoomed);
+
+        var drag = d3.behavior.drag()
+            .origin(function(d) { return d; })
+            .on("dragstart", dragstarted)
+            .on("drag", dragged)
+            .on("dragend", dragended);
+
+
+        var svg = d3.select("#map").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.right + ")")
+            .call(zoom);
+			
+					
+		var rect = svg.append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .style("fill", "none")
+            .style("pointer-events", "all");
+      
+		var container = svg.append("g");
+	  
+		var tip = d3.tip()
+					.attr("class", "d3-tip")
+					.offset([-10, 0])
+					.html(function (d) { return  d.name + "</span>";})
+		svg.call(tip);
+
+d3.json("forcenode.json", function(error, graph) {
+           		   
+        
+		force
+			 .nodes(graph.nodes)
+             .links(graph.links)
+             .start();
+      
+		var link = container.append("g")
+                        .attr("class", "links")
+                        .selectAll(".link")
+						.data(graph.links)
+                        .enter().append("line")
+						.attr("class", "link")
+						.style("stroke-width", function(d) { return Math.sqrt(d.value); });
+						
+		var node = container.append("g")
+                        .attr("class", "nodes")
+                        .selectAll(".node")
+			.data(graph.nodes)
+			.enter().append("g")
+			.attr("class", "node")
+            .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; })
+            .call(drag)
+			.on('mouseover', tip.show) 
+			.on('mouseout', tip.hide);
+			//.call(node_drag);			
+		node.append("title")
+			.text(function(d) { return d.name; });
+			
+		  
+		node.append("circle")
+		//node.append("rect")
+		//.attr("width", 20)
+		//.attr("height", 20)
+		 .attr("r", function(d){return (d.size);})
+	  
+		.style("fill", function(d) { return color(d.group); })
+		
+//Now we are giving the SVGs co-ordinates - the force layout is generating the co-ordinates which this code is using to update the attributes of the SVG elements
+         
+                force.on("tick", function() {
+                    link.attr("x1", function(d) { return d.source.x; })
+                        .attr("y1", function(d) { return d.source.y; })
+                        .attr("x2", function(d) { return d.target.x; })
+                        .attr("y2", function(d) { return d.target.y; });
+
+                    node.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+                });
+                
+                var linkedByIndex = {};
+                graph.links.forEach(function(d) {
+                    linkedByIndex[d.source.index + "," + d.target.index] = 1;
+                });
+
+                function isConnected(a, b) {
+                    return linkedByIndex[a.index + "," + b.index] || linkedByIndex[b.index + "," + a.index];
+                }
+		
+		node.on("mouseover", function(d){
+                        
+                        node.classed("node-active", function(o) {
+                            thisOpacity = isConnected(d, o) ? true : false;
+                            this.setAttribute('fill-opacity', thisOpacity);
+                            return thisOpacity;
+                        });
+						 node.classed("node-inactive", function(o) {
+							thisOpacity = isConnected(d, o) ? false : true;
+							this.setAttribute('fill-opacity', thisOpacity);
+							return thisOpacity;
+						});
+
+                        link.classed("link-active", function(o) {
+                            return o.source === d || o.target === d ? true : false;
+                        });
+                        
+                        d3.select(this).classed("node-active", true);
+						d3.select(this).classed("node-inactive", false);
+                        d3.select(this).select("rect").transition()
+                                .duration(750)
+                                .attr("width", (d.weight * 2+ 12)*1.5)
+								.attr("height", (d.weight * 2+ 12)*1.5);
+						
+                })
+		
+		.on("mouseout", function(d){
+                                 
+                        node.classed("node-active", false);
+                        link.classed("link-active", false);
+						node.classed("node-inactive", false);
+                    
+                        d3.select(this).select("rect").transition()
+                                .duration(750)
+                                .attr("width", 20)
+								.attr("height", 20);
+                });
+				
+				});
+
+
+        function dottype(d) {
+          d.x = +d.x;
+          d.y = +d.y;
+          return d;
+        }
+
+        function zoomed() {
+          container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+        }
+
+        function dragstarted(d) {
+          d3.event.sourceEvent.stopPropagation();
+          
+          d3.select(this).classed("dragging", true);
+          force.start();
+        }
+
+        function dragged(d) {
+          
+          d3.select(this).attr("cx", d.x = d3.event.x).attr("cy", d.y = d3.event.y);
+          
+        }
+
+        function dragended(d) {
+          
+          d3.select(this).classed("dragging", false);
+        }
+		
+		
+
+</script>
+</body>
+</html>
